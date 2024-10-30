@@ -17,6 +17,8 @@ enum SummaryError {
     },
     #[error("can't find summary section in {path:?}")]
     NoSummary { path: PathBuf },
+    #[error("{path:?} seems to have multiple summary sections")]
+    Ambiguous { path: PathBuf },
 }
 
 #[derive(Parser, Debug, PartialEq)]
@@ -35,13 +37,20 @@ fn get_summary(path: PathBuf) -> Result<String, SummaryError> {
         Ok(text) => text,
         Err(error) => return Err(SummaryError::CannotRead { path, error }),
     };
+
     let start = PATTERN
         .captures(&text)
-        .ok_or_else(|| SummaryError::NoSummary { path })?
+        .ok_or_else(|| SummaryError::NoSummary { path: path.clone() })?
         .get(1)
         .expect("regex should not have been able to match without the capture")
         .start();
-    Ok(text[start..].trim_end().to_string())
+
+    let summary = text[start..].trim_end();
+    if PATTERN.is_match(summary) {
+        Err(SummaryError::Ambiguous { path })
+    } else {
+        Ok(summary.into())
+    }
 }
 
 fn main() -> Result<(), SummaryError> {
