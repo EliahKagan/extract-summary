@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use clap::Parser;
 use regex::Regex;
@@ -25,24 +26,26 @@ struct Cli {
     path: PathBuf,
 }
 
-fn main() -> Result<(), SummaryError> {
-    let re = Regex::new(r"\n-{10,}\r?\n([ \t]+Summary)\b")
-        .expect("hard-coded regex pattern should be valid");
-    let path = Cli::parse().path;
+static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\n-{10,}\r?\n([ \t]+Summary)\b").expect("hard-coded regex pattern should be valid")
+});
+
+fn get_summary(path: PathBuf) -> Result<String, SummaryError> {
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
         Err(error) => return Err(SummaryError::CannotRead { path, error }),
     };
-    let start = re
+    let start = PATTERN
         .captures(&text)
         .ok_or_else(|| SummaryError::NoSummary { path })?
         .get(1)
         .expect("regex should not have been able to match without the capture")
         .start();
-    let summary = &text[start..];
-    print!("{}", summary);
-    if !summary.ends_with('\n') {
-        println!();
-    }
+    Ok(text[start..].trim_end().to_string())
+}
+
+fn main() -> Result<(), SummaryError> {
+    let path = Cli::parse().path;
+    println!("{}", get_summary(path)?);
     Ok(())
 }
