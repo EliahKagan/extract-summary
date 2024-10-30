@@ -1,3 +1,5 @@
+//! Extract summaries from the default (human-readable) output format of `cargo nextest`.
+
 use std::fs;
 use std::path::PathBuf;
 
