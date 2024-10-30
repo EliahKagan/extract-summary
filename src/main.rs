@@ -45,7 +45,7 @@ fn get_summary(path: PathBuf) -> Result<String, SummaryError> {
         .expect("regex should not have been able to match without the capture")
         .start();
 
-    let summary = text[start..].trim_end();
+    let summary = &text[start..];
     if PATTERN.is_match(summary) {
         Err(SummaryError::Ambiguous { path })
     } else {
@@ -55,6 +55,7 @@ fn get_summary(path: PathBuf) -> Result<String, SummaryError> {
 
 fn main() -> Result<(), SummaryError> {
     let path = Cli::parse().path;
-    println!("{}", get_summary(path)?);
+    let summary = get_summary(path)?;
+    println!("{}", summary.trim_end());
     Ok(())
 }
