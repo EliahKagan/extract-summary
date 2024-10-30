@@ -1,14 +1,19 @@
-use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
 use clap::Parser;
 use regex::Regex;
+use thiserror::Error;
 
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 enum SummaryError {
+    #[error("can't read {path:?} due to: {error}")]
+    CannotRead {
+        path: PathBuf,
+        error: std::io::Error,
+    },
     #[error("can't find summary section in {path:?}")]
-    NotFound { path: PathBuf },
+    NoSummary { path: PathBuf },
 }
 
 #[derive(Parser, Debug, PartialEq)]
@@ -18,14 +23,17 @@ struct Cli {
     path: PathBuf,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), SummaryError> {
     let re = Regex::new(r"\n-{10,}\r?\n([ \t]+Summary)\b")
         .expect("hard-coded regex pattern should be valid");
     let path = Cli::parse().path;
-    let text = fs::read_to_string(&path)?; // TODO: Add a SummaryError case for this.
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) => return Err(SummaryError::CannotRead { path, error }),
+    };
     let start = re
         .captures(&text)
-        .ok_or_else(|| SummaryError::NotFound { path })?
+        .ok_or_else(|| SummaryError::NoSummary { path })?
         .get(1)
         .expect("regex should not have been able to match without the capture")
         .start();
