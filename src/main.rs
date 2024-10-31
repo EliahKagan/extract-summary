@@ -107,7 +107,7 @@ fn process_entry(path: PathBuf, outdir: &Path) -> Result<(), Error> {
             error,
         })
     } else {
-        Ok(()) // Skip unrelated files in the output directory.
+        Ok(()) // Skip unrelated files in the input directory.
     }
 }
 
@@ -122,12 +122,10 @@ fn main() -> Result<(), Error> {
                 path: indir.clone(),
                 error,
             })?;
-
             fs::create_dir_all(&outdir).map_err(|error| Error::CannotCreateDir {
                 path: outdir.clone(),
                 error,
             })?;
-
             for maybe_entry in entries {
                 match maybe_entry {
                     Ok(entry) => process_entry(entry.path(), &outdir)?,
