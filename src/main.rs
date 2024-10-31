@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use regex::Regex;
 use thiserror::Error;
 
@@ -21,11 +21,27 @@ enum SummaryError {
     Ambiguous { path: PathBuf },
 }
 
-#[derive(Parser, Debug, PartialEq)]
+#[derive(Subcommand, Clone, Debug, PartialEq)]
+enum Command {
+    /// Read a single file and display its summary.
+    Show {
+        /// Path to a file in the `cargo nextest` human-readable output format.
+        infile: PathBuf,
+    },
+    /// Read a directory of files. Write their summaries in a (usually other) directory.
+    Batch {
+        /// Path to a directory of files in the `cargo nextest` human-readable output format.
+        indir: PathBuf,
+        /// Path to directory in which output files consisting only of summaries will be created.
+        outdir: PathBuf,
+    },
+}
+
+#[derive(Parser, Clone, Debug, PartialEq)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// Path to a file in the `cargo nextest` human-readable output format to parse.
-    path: PathBuf,
+    #[command(subcommand)]
+    command: Command,
 }
 
 static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
@@ -54,8 +70,14 @@ fn get_summary(path: PathBuf) -> Result<String, SummaryError> {
 }
 
 fn main() -> Result<(), SummaryError> {
-    let path = Cli::parse().path;
-    let summary = get_summary(path)?;
-    println!("{}", summary.trim_end());
+    match Cli::parse().command {
+        Command::Show { infile } => {
+            let summary = get_summary(infile)?;
+            println!("{}", summary.trim_end());
+        }
+        Command::Batch { indir, outdir } => {
+            panic!("batch mode not yet implemented");
+        }
+    }
     Ok(())
 }
