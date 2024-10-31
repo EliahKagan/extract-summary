@@ -7,6 +7,12 @@ It has:
 - a `show` subcommand that takes the path to a file and displays the summary (and which is mostly just for testing), *and*
 - a `batch` subcommand that paths to input and output directories and extracts summaries from multiple files and saves them to multiple associated files.
 
+For example, with a preexisting `runs` directory with full test run logs, to place summaries in a `summaries` directory:
+
+```sh
+extract-summary batch runs summaries
+```
+
 ## Usage
 
 ```text
