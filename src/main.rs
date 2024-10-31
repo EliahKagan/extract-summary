@@ -1,17 +1,32 @@
 //! Extract summaries from the default (human-readable) output format of `cargo nextest`.
 
+use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use clap::{Parser, Subcommand};
 use regex::Regex;
-use thiserror::Error;
 
-#[derive(Error, Debug)]
-enum SummaryError {
-    #[error("can't read {path:?} due to: {error}")]
-    CannotRead {
+#[derive(thiserror::Error, Debug)]
+enum Error {
+    #[error("can't read file {path:?} due to: {error}")]
+    CannotReadFile {
+        path: PathBuf,
+        error: std::io::Error,
+    },
+    #[error("can't read directory {path:?} due to: {error}")]
+    CannotReadDir {
+        path: PathBuf,
+        error: std::io::Error,
+    },
+    #[error("cannot create directory {path:?} due to: {error}")]
+    CannotCreateDir {
+        path: PathBuf,
+        error: std::io::Error,
+    },
+    #[error("cannot write file {path:?} due to: {error}")]
+    CannotWriteFile {
         path: PathBuf,
         error: std::io::Error,
     },
@@ -48,35 +63,77 @@ static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\n-{10,}\r?\n([ \t]+Summary)\b").expect("hard-coded regex pattern should be valid")
 });
 
-fn get_summary(path: PathBuf) -> Result<String, SummaryError> {
+fn get_summary(path: PathBuf) -> Result<String, Error> {
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(error) => return Err(SummaryError::CannotRead { path, error }),
+        Err(error) => return Err(Error::CannotReadFile { path, error }),
     };
 
     let start = PATTERN
         .captures(&text)
-        .ok_or_else(|| SummaryError::NoSummary { path: path.clone() })?
+        .ok_or_else(|| Error::NoSummary { path: path.clone() })?
         .get(1)
         .expect("regex should not have been able to match without the capture")
         .start();
 
     let summary = &text[start..];
     if PATTERN.is_match(summary) {
-        Err(SummaryError::Ambiguous { path })
+        Err(Error::Ambiguous { path })
     } else {
         Ok(summary.into())
     }
 }
 
-fn main() -> Result<(), SummaryError> {
+fn name_outfile(path: &Path) -> Option<OsString> {
+    let extension = match path.extension() {
+        Some(ext) if ["log", "txt"].map(OsStr::new).contains(&ext) => ext,
+        _ => return None,
+    };
+    let mut outfile = path
+        .file_stem()
+        .expect("file name should exist since its extension exists")
+        .to_os_string();
+    outfile.push("-summary.");
+    outfile.push(extension);
+    Some(outfile)
+}
+
+fn process_entry(path: PathBuf, outdir: &Path) -> Result<(), Error> {
+    if let Some(outfile) = name_outfile(&path) {
+        let outpath = outdir.join(outfile);
+        let summary = get_summary(path)?;
+        fs::write(&outpath, summary).map_err(|error| Error::CannotWriteFile {
+            path: outpath,
+            error,
+        })
+    } else {
+        Ok(()) // Skip unrelated files in the output directory.
+    }
+}
+
+fn main() -> Result<(), Error> {
     match Cli::parse().command {
         Command::Show { infile } => {
             let summary = get_summary(infile)?;
             println!("{}", summary.trim_end());
         }
         Command::Batch { indir, outdir } => {
-            panic!("batch mode not yet implemented");
+            let entries = fs::read_dir(&indir).map_err(|error| Error::CannotReadDir {
+                path: indir.clone(),
+                error,
+            })?;
+
+            fs::create_dir_all(&outdir).map_err(|error| Error::CannotCreateDir {
+                path: outdir.clone(),
+                error,
+            })?;
+
+            for maybe_entry in entries {
+                match maybe_entry {
+                    Ok(entry) => process_entry(entry.path(), &outdir)?,
+                    Err(error) => return Err(Error::CannotReadFile { path: indir, error }),
+                }
+            }
         }
     }
     Ok(())
