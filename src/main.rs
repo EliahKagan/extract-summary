@@ -111,28 +111,33 @@ fn process_entry(path: PathBuf, outdir: &Path) -> Result<(), Error> {
     }
 }
 
-fn main() -> Result<(), Error> {
-    match Cli::parse().command {
-        Command::Show { infile } => {
-            let summary = get_summary(infile)?;
-            println!("{}", summary.trim_end());
-        }
-        Command::Batch { indir, outdir } => {
-            let entries = fs::read_dir(&indir).map_err(|error| Error::CannotReadDir {
-                path: indir.clone(),
-                error,
-            })?;
-            fs::create_dir_all(&outdir).map_err(|error| Error::CannotCreateDir {
-                path: outdir.clone(),
-                error,
-            })?;
-            for maybe_entry in entries {
-                match maybe_entry {
-                    Ok(entry) => process_entry(entry.path(), &outdir)?,
-                    Err(error) => return Err(Error::CannotReadFile { path: indir, error }),
-                }
-            }
+fn do_show(infile: PathBuf) -> Result<(), Error> {
+    let summary = get_summary(infile)?;
+    println!("{}", summary.trim_end());
+    Ok(())
+}
+
+fn do_batch(indir: PathBuf, outdir: PathBuf) -> Result<(), Error> {
+    let entries = fs::read_dir(&indir).map_err(|error| Error::CannotReadDir {
+        path: indir.clone(),
+        error,
+    })?;
+    fs::create_dir_all(&outdir).map_err(|error| Error::CannotCreateDir {
+        path: outdir.clone(),
+        error,
+    })?;
+    for maybe_entry in entries {
+        match maybe_entry {
+            Ok(entry) => process_entry(entry.path(), &outdir)?,
+            Err(error) => return Err(Error::CannotReadFile { path: indir, error }),
         }
     }
     Ok(())
+}
+
+fn main() -> Result<(), Error> {
+    match Cli::parse().command {
+        Command::Show { infile } => do_show(infile),
+        Command::Batch { indir, outdir } => do_batch(indir, outdir),
+    }
 }
